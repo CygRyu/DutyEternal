@@ -518,6 +518,16 @@
             font-size: 0.8rem;
             margin-bottom: 8px;
         }
+
+        .save-status {
+            background-color: rgba(34, 139, 34, 0.1);
+            border: 1px solid rgba(34, 139, 34, 0.3);
+            color: #22c55e;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -530,7 +540,10 @@
                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%23DAA520' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L2 7v10c0 5.55 3.84 10 9 10s9-4.45 9-10V7L12 2z'/%3E%3Cpath d='M12 22s8-4 8-10V7l-8-5-8 5v5c0 6 8 10 8 10z'/%3E%3C/svg%3E" alt="Imperial Aquila" class="h-12 w-12 mr-3">
                 <div>
                     <h1 class="text-3xl gothic font-bold text-accent">Duty Eternal</h1>
-                    <p class="text-xs text-accent/70">Imperial Mission System</p>
+                    <p class="text-xs text-accent/70 flex items-center">
+                        Imperial Mission System
+                        <span id="save-status" class="save-status hidden">Auto-saved</span>
+                    </p>
                 </div>
             </div>
             
@@ -1207,6 +1220,11 @@
                 this.missions = [];
                 this.nextId = 1;
                 
+                // Save status tracking
+                this.saveInProgress = false;
+                this.lastSaveTime = 0;
+                this.saveFailures = 0;
+                
                 // Game state
                 this.gameState = {
                     // Basic progression
@@ -1393,7 +1411,61 @@
                     }
                 };
                 
-                // UI elements
+                // Initialize elements object after DOM elements exist
+                this.elements = {};
+                
+                // Initialize
+                this.init();
+            }
+            
+            init() {
+                // Wait for DOM to be ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => this.initializeApp());
+                } else {
+                    this.initializeApp();
+                }
+            }
+            
+            initializeApp() {
+                // Initialize UI elements
+                this.initializeElements();
+                
+                // Load saved data
+                this.loadFromStorage();
+                
+                // Check for day change
+                this.checkDayChange();
+                
+                // Initialize rank requirements if not set
+                this.initializeRankRequirements();
+                
+                // Set up event listeners
+                this.setupEventListeners();
+                
+                // Render UI
+                this.updateResolveDisplay();
+                this.updateMissionBoard();
+                this.updateDutyList();
+                this.updateStats();
+                this.updateFactionDisplay();
+                this.updateTutorialProgress();
+                this.updateRankBenefits();
+                this.updateParagonBenefits();
+                this.updateArtifactsDisplay();
+                this.updateDiminishingReturnsWarning();
+                
+                // Start resolve regeneration timer
+                this.startResolveRegeneration();
+                
+                // Set up form validation
+                this.setupFormValidation();
+                
+                // Start auto-save
+                this.startAutoSave();
+            }
+            
+            initializeElements() {
                 this.elements = {
                     // Mission Board
                     missionContainer: document.getElementById('mission-container'),
@@ -1425,6 +1497,9 @@
                     rankProgressFill: document.getElementById('rank-progress-fill'),
                     factionTooltipHeader: document.getElementById('faction-tooltip-header'),
                     factionTooltipSettings: document.getElementById('faction-tooltip-settings'),
+                    
+                    // Save status
+                    saveStatus: document.getElementById('save-status'),
                     
                     // Archives (Activities)
                     dutyList: document.getElementById('duty-list'),
@@ -1520,41 +1595,6 @@
                     // Toast system
                     toastContainer: document.getElementById('toast-container')
                 };
-                
-                // Initialize
-                this.init();
-            }
-            
-            init() {
-                // Load saved data
-                this.loadFromStorage();
-                
-                // Check for day change
-                this.checkDayChange();
-                
-                // Initialize rank requirements if not set
-                this.initializeRankRequirements();
-                
-                // Set up event listeners
-                this.setupEventListeners();
-                
-                // Render UI
-                this.updateResolveDisplay();
-                this.updateMissionBoard();
-                this.updateDutyList();
-                this.updateStats();
-                this.updateFactionDisplay();
-                this.updateTutorialProgress();
-                this.updateRankBenefits();
-                this.updateParagonBenefits();
-                this.updateArtifactsDisplay();
-                this.updateDiminishingReturnsWarning();
-                
-                // Start resolve regeneration timer
-                this.startResolveRegeneration();
-                
-                // Set up form validation
-                this.setupFormValidation();
             }
             
             initializeRankRequirements() {
@@ -1572,6 +1612,250 @@
                     
                     this.saveToStorage();
                 }
+            }
+            
+            startAutoSave() {
+                // Auto-save every 30 seconds
+                setInterval(() => {
+                    this.saveToStorage();
+                }, 30000);
+            }
+            
+            saveToStorage() {
+                if (this.saveInProgress) return;
+                
+                this.saveInProgress = true;
+                
+                try {
+                    const dataToSave = {
+                        duties: this.duties,
+                        missions: this.missions,
+                        nextId: this.nextId,
+                        gameState: this.gameState,
+                        saveTimestamp: Date.now(),
+                        version: '3.2.1'
+                    };
+                    
+                    // Clean the data for serialization
+                    const cleanedData = this.cleanDataForSerialization(dataToSave);
+                    const jsonString = JSON.stringify(cleanedData);
+                    
+                    let saveSuccess = false;
+                    
+                    // Method 1: Try direct localStorage first
+                    try {
+                        localStorage.setItem('dutyEternalDataDirect', jsonString);
+                        localStorage.setItem('dutyEternalDataBackup', jsonString);
+                        saveSuccess = true;
+                        console.log('Direct save successful');
+                    } catch (directError) {
+                        console.warn('Direct localStorage failed:', directError);
+                    }
+                    
+                    // Method 2: Try base64 encoded
+                    if (!saveSuccess) {
+                        try {
+                            const encodedData = btoa(unescape(encodeURIComponent(jsonString)));
+                            localStorage.setItem('dutyEternalData', encodedData);
+                            saveSuccess = true;
+                            console.log('Encoded save successful');
+                        } catch (encodeError) {
+                            console.warn('Base64 localStorage failed:', encodeError);
+                        }
+                    }
+                    
+                    // Method 3: Try session storage as backup
+                    try {
+                        sessionStorage.setItem('dutyEternalSession', jsonString);
+                        console.log('Session storage backup successful');
+                    } catch (sessionError) {
+                        console.warn('Session storage failed:', sessionError);
+                    }
+                    
+                    if (saveSuccess) {
+                        this.lastSaveTime = Date.now();
+                        this.saveFailures = 0;
+                        this.showSaveStatus('Auto-saved', 'success');
+                        console.log('Save completed successfully at', new Date().toISOString());
+                    } else {
+                        this.saveFailures++;
+                        this.showSaveStatus('Save failed', 'error');
+                        if (this.saveFailures >= 3) {
+                            this.showToast('Multiple save failures detected! Use Export to backup your data!', 'error');
+                        }
+                    }
+                    
+                } catch (e) {
+                    this.saveFailures++;
+                    console.error('Critical error saving data:', e);
+                    this.showSaveStatus('Save error', 'error');
+                    this.showToast('Save error occurred! Use Export to backup your data!', 'error');
+                } finally {
+                    this.saveInProgress = false;
+                }
+            }
+            
+            cleanDataForSerialization(data) {
+                // Create a deep copy of the data to avoid modifying the original
+                return JSON.parse(JSON.stringify(data, (key, value) => {
+                    // Remove any functions or undefined values
+                    if (typeof value === 'function' || value === undefined) {
+                        return null;
+                    }
+                    // Handle circular references by converting them to null
+                    if (typeof value === 'object' && value !== null) {
+                        if (value.constructor && value.constructor.name && value.constructor.name !== 'Object' && value.constructor.name !== 'Array') {
+                            return null;
+                        }
+                    }
+                    return value;
+                }));
+            }
+            
+            loadFromStorage() {
+                let loadSuccess = false;
+                
+                try {
+                    // Try Method 1: Direct localStorage
+                    let savedData = localStorage.getItem('dutyEternalDataDirect');
+                    if (savedData) {
+                        console.log('Loading from direct storage');
+                        const data = JSON.parse(savedData);
+                        this.restoreGameData(data);
+                        loadSuccess = true;
+                    }
+                } catch (e) {
+                    console.warn('Direct load failed:', e);
+                }
+                
+                if (!loadSuccess) {
+                    try {
+                        // Try Method 2: Base64 encoded
+                        let encodedData = localStorage.getItem('dutyEternalData');
+                        if (encodedData) {
+                            console.log('Loading from encoded storage');
+                            const jsonString = decodeURIComponent(escape(atob(encodedData)));
+                            const data = JSON.parse(jsonString);
+                            this.restoreGameData(data);
+                            loadSuccess = true;
+                        }
+                    } catch (e) {
+                        console.warn('Encoded load failed:', e);
+                    }
+                }
+                
+                if (!loadSuccess) {
+                    try {
+                        // Try Method 3: Backup localStorage
+                        let backupData = localStorage.getItem('dutyEternalDataBackup');
+                        if (backupData) {
+                            console.log('Loading from backup storage');
+                            const data = JSON.parse(backupData);
+                            this.restoreGameData(data);
+                            loadSuccess = true;
+                        }
+                    } catch (e) {
+                        console.warn('Backup load failed:', e);
+                    }
+                }
+                
+                if (!loadSuccess) {
+                    try {
+                        // Try Method 4: Session storage
+                        let sessionData = sessionStorage.getItem('dutyEternalSession');
+                        if (sessionData) {
+                            console.log('Loading from session storage');
+                            const data = JSON.parse(sessionData);
+                            this.restoreGameData(data);
+                            loadSuccess = true;
+                            this.showToast('Loaded from session backup. Ensure you export your data!', 'error');
+                        }
+                    } catch (e) {
+                        console.warn('Session load failed:', e);
+                    }
+                }
+                
+                if (loadSuccess) {
+                    console.log('Game data loaded successfully');
+                } else {
+                    console.log('No saved data found, starting fresh');
+                }
+            }
+            
+            restoreGameData(data) {
+                this.duties = data.duties || [];
+                this.missions = data.missions || [];
+                this.nextId = data.nextId || 1;
+                
+                // Merge saved game state with defaults
+                this.gameState = {
+                    ...this.gameState,
+                    ...data.gameState,
+                    // Ensure new fields exist with defaults
+                    rankRequirements: data.gameState?.rankRequirements || {},
+                    rankBenefits: data.gameState?.rankBenefits || {},
+                    paragonBenefits: {
+                        maxResolve: 0,
+                        gloryMultiplier: 0,
+                        corruptionResistance: 0,
+                        artifactSlots: 0,
+                        ...data.gameState?.paragonBenefits
+                    },
+                    hereticalBenefits: data.gameState?.hereticalBenefits || {},
+                    redemptionProgress: data.gameState?.redemptionProgress || 0,
+                    factionBuffs: {
+                        zealStacks: 0,
+                        dutyStacks: 0,
+                        lastMissionTime: null,
+                        consecutiveMissions: 0,
+                        zealDuration: 0,
+                        waaaghUsedToday: false,
+                        lastDayReset: new Date().toDateString(),
+                        ...data.gameState?.factionBuffs
+                    },
+                    // Initialize new stats if missing
+                    totalArtifactsFound: data.gameState?.totalArtifactsFound || 0,
+                    totalArtifactsSold: data.gameState?.totalArtifactsSold || 0,
+                    factionMissionsCompleted: {
+                        'space-marines': 0,
+                        'chaos': 0,
+                        'orks': 0,
+                        'eldar': 0,
+                        'imperial-guard': 0,
+                        ...data.gameState?.factionMissionsCompleted
+                    },
+                    factionGloryEarned: {
+                        'space-marines': 0,
+                        'chaos': 0,
+                        'orks': 0,
+                        'eldar': 0,
+                        'imperial-guard': 0,
+                        ...data.gameState?.factionGloryEarned
+                    }
+                };
+            }
+            
+            showSaveStatus(message, type = 'success') {
+                if (!this.elements.saveStatus) return;
+                
+                this.elements.saveStatus.textContent = message;
+                this.elements.saveStatus.classList.remove('hidden');
+                
+                // Reset classes
+                this.elements.saveStatus.classList.remove('save-status', 'bg-red-900/20', 'border-red-600/50', 'text-red-200');
+                
+                if (type === 'error') {
+                    this.elements.saveStatus.classList.add('bg-red-900/20', 'border-red-600/50', 'text-red-200');
+                } else {
+                    this.elements.saveStatus.classList.add('save-status');
+                }
+                
+                // Hide after 3 seconds
+                setTimeout(() => {
+                    if (this.elements.saveStatus) {
+                        this.elements.saveStatus.classList.add('hidden');
+                    }
+                }, 3000);
             }
             
             setupEventListeners() {
@@ -3408,7 +3692,7 @@
                 const tutorialEntries = [
                     {
                         title: "The Emperor's Service",
-                        content: "Welcome, faithful servant. The Mission Board channels the Emperor's will, transforming your mundane tasks into sacred duties. Input activities in the Archives, then receive divine missions to crush procrastination and serve the Imperium. Complete missions to earn Glory Points and prove your worth."
+                        content: "Welcome, faithful servant. The Mission Board channels the Emperor's will, transforming your mundane tasks into sacred duties. Input activities in the Archives, then receive divine missions to crush procrastination and serve the Imperium. Complete missions to earn Glory Points and prove your worth. Note: Your progress is automatically saved, but you can use Export Data to create manual backups of your service record."
                     },
                     {
                         title: "Resolve and Duty",
@@ -3419,12 +3703,12 @@
                         content: "Beware the corruption of Chaos! Abandoning missions taints your soul with heretical weakness. Accumulate too much corruption and mission completion will cost additional Resolve. Purge this taint by completing consecutive missions without abandonment - show the Emperor your unwavering dedication."
                     },
                     {
-                        title: "Faction Powers",
+                        title: "Faction Powers and Artifacts",
                         content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for consecutive missions, Orks have WAAAGH! events, Chaos tempts with Warp power, Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
                     },
                     {
                         title: "Sacred Artifacts",
-                        content: "Artifacts are precious relics discovered through your service to the Emperor. Each has unique effects and rarities - Common artifacts last 1 day, Rare last 3 days, and Legendary are permanent. Store up to 10 artifacts and equip them for active benefits. Sell unwanted artifacts for Glory Points, but choose wisely - some effects are irreplaceable! Your artifact discoveries and sales are tracked in the Tactical Slate."
+                        content: "Artifacts are precious relics discovered through your service to the Emperor. Each has unique effects and rarities - Common artifacts last 1 day, Rare last 3 days, and Legendary are permanent. Store up to 10 artifacts and equip them for active benefits. Sell unwanted artifacts for Glory Points, but choose wisely - some effects are irreplaceable! Use the Export Data feature to backup your progress and prevent data loss."
                     },
                     {
                         title: "Ranks and Progression",
@@ -3432,7 +3716,7 @@
                     },
                     {
                         title: "Paragon of the Imperium",
-                        content: "True servants of the Emperor never cease their duty. Upon reaching the highest rank in your faction, you begin the path of Paragon - an endless progression of increasing legend and capability. Paragon Ranks grant permanent benefits like increased maximum Resolve, Glory Point bonuses, corruption resistance, and artifact slots. Your dedication shall echo through eternity! Be aware: Excessive daily mission completion may result in diminishing Glory returns as your spirit grows weary - pace yourself for optimal service."
+                        content: "True servants of the Emperor never cease their duty. Upon reaching the highest rank in your faction, you begin the path of Paragon - an endless progression of increasing legend and capability. Paragon Ranks grant permanent benefits like increased maximum Resolve, Glory Point bonuses, corruption resistance, and artifact slots. Your dedication shall echo through eternity! Be aware: Excessive daily mission completion may result in diminishing Glory returns as your spirit grows weary - pace yourself for optimal service. Your data is saved automatically every 30 seconds, but regularly use Export Data to create safe backups of your eternal service record."
                     }
                 ];
                 
@@ -3808,31 +4092,60 @@
             
             manualSave() {
                 this.saveToStorage();
-                this.showToast('Game state saved successfully!', 'success');
+                this.showToast('Manual save completed! Your progress is secured by the Emperor\'s will.', 'success');
             }
             
             exportGameData() {
+                // Hide import container and show export container
                 this.elements.importContainer.classList.add('hidden');
                 this.elements.exportContainer.classList.remove('hidden');
                 
-                const exportData = {
-                    duties: this.duties,
-                    missions: this.missions,
-                    nextId: this.nextId,
-                    gameState: this.gameState,
-                    version: '3.2.0'
-                };
-                
-                const exportString = btoa(JSON.stringify(exportData));
-                this.elements.exportText.value = exportString;
-                
-                // Copy to clipboard
-                this.elements.exportText.select();
                 try {
-                    document.execCommand('copy');
-                    this.showToast('Game data exported and copied to clipboard!', 'success');
-                } catch (err) {
-                    this.showToast('Export complete - copy the text manually.', 'success');
+                    const exportData = {
+                        duties: this.duties,
+                        missions: this.missions,
+                        nextId: this.nextId,
+                        gameState: this.gameState,
+                        exportTimestamp: Date.now(),
+                        version: '3.2.1'
+                    };
+                    
+                    // Clean the data for export
+                    const cleanedData = this.cleanDataForSerialization(exportData);
+                    const jsonString = JSON.stringify(cleanedData);
+                    
+                    // Create base64 encoded string
+                    const exportString = btoa(unescape(encodeURIComponent(jsonString)));
+                    
+                    // Set the value
+                    this.elements.exportText.value = exportString;
+                    
+                    // Select and attempt to copy
+                    this.elements.exportText.select();
+                    this.elements.exportText.setSelectionRange(0, 99999); // For mobile devices
+                    
+                    try {
+                        // Try the modern clipboard API first
+                        if (navigator.clipboard && window.isSecureContext) {
+                            navigator.clipboard.writeText(exportString).then(() => {
+                                this.showToast('Sacred data exported and copied to clipboard! Keep this code safe - it contains your eternal service record.', 'success');
+                            }).catch(err => {
+                                this.showToast('Export complete - copy the sacred code manually to preserve your progress.', 'success');
+                            });
+                        } else {
+                            // Fallback to document.execCommand
+                            document.execCommand('copy');
+                            this.showToast('Sacred data exported and copied to clipboard! Keep this code safe - it contains your eternal service record.', 'success');
+                        }
+                    } catch (err) {
+                        console.warn('Clipboard copy failed:', err);
+                        this.showToast('Export complete - copy the sacred code manually to preserve your progress.', 'success');
+                    }
+                    
+                } catch (error) {
+                    console.error('Export failed:', error);
+                    this.showToast('Export failed! Unable to generate sacred data code.', 'error');
+                    this.elements.exportContainer.classList.add('hidden');
                 }
             }
             
@@ -3849,60 +4162,15 @@
                         throw new Error('Import data is empty');
                     }
                     
-                    const importData = JSON.parse(atob(importString));
+                    // Decode the base64 string
+                    const jsonString = decodeURIComponent(escape(atob(importString)));
+                    const importData = JSON.parse(jsonString);
                     
                     if (!importData.duties || !importData.missions || !importData.gameState) {
-                        throw new Error('Import data is invalid');
+                        throw new Error('Import data is invalid or corrupted');
                     }
                     
-                    this.duties = importData.duties;
-                    this.missions = importData.missions;
-                    this.nextId = importData.nextId;
-                    this.gameState = {
-                        ...this.gameState,
-                        ...importData.gameState,
-                        // Ensure new fields exist with defaults
-                        rankRequirements: importData.gameState.rankRequirements || {},
-                        rankBenefits: importData.gameState.rankBenefits || {},
-                        paragonBenefits: {
-                            maxResolve: 0,
-                            gloryMultiplier: 0,
-                            corruptionResistance: 0,
-                            artifactSlots: 0,
-                            ...importData.gameState.paragonBenefits
-                        },
-                        hereticalBenefits: importData.gameState.hereticalBenefits || {},
-                        redemptionProgress: importData.gameState.redemptionProgress || 0,
-                        factionBuffs: {
-                            zealStacks: 0,
-                            dutyStacks: 0,
-                            lastMissionTime: null,
-                            consecutiveMissions: 0,
-                            zealDuration: 0,
-                            waaaghUsedToday: false,
-                            lastDayReset: new Date().toDateString(),
-                            ...importData.gameState.factionBuffs
-                        },
-                        // Initialize new stats if missing
-                        totalArtifactsFound: importData.gameState.totalArtifactsFound || 0,
-                        totalArtifactsSold: importData.gameState.totalArtifactsSold || 0,
-                        factionMissionsCompleted: {
-                            'space-marines': 0,
-                            'chaos': 0,
-                            'orks': 0,
-                            'eldar': 0,
-                            'imperial-guard': 0,
-                            ...importData.gameState.factionMissionsCompleted
-                        },
-                        factionGloryEarned: {
-                            'space-marines': 0,
-                            'chaos': 0,
-                            'orks': 0,
-                            'eldar': 0,
-                            'imperial-guard': 0,
-                            ...importData.gameState.factionGloryEarned
-                        }
-                    };
+                    this.restoreGameData(importData);
                     
                     // Initialize rank requirements if missing (with new doubled values)
                     this.initializeRankRequirements();
@@ -3920,18 +4188,18 @@
                     this.updateDiminishingReturnsWarning();
                     
                     this.elements.importContainer.classList.add('hidden');
-                    this.showToast('Game data imported successfully!', 'success');
+                    this.showToast('Sacred data restored successfully! Your eternal service continues unabated.', 'success');
                     
                 } catch (error) {
-                    this.showToast('Import failed: Invalid data format!', 'error');
                     console.error('Import error:', error);
+                    this.showToast('Import failed: The sacred code appears corrupted or invalid!', 'error');
                 }
             }
             
             showHardResetConfirmation() {
                 this.elements.confirmTitle.textContent = 'Purge All Data';
                 this.elements.confirmMessage.innerHTML = 
-                    `<p class="text-red-500 font-bold mb-2">Warning: This will erase ALL your data!</p>
+                    `<p class="text-red-500 font-bold mb-2">Warning: This will erase ALL your sacred service records!</p>
                      <p>Are you sure you want to reset everything? This action cannot be undone.</p>`;
                 
                 this.elements.confirmOk.onclick = () => {
@@ -4007,7 +4275,16 @@
                     redemptionProgress: 0
                 };
                 
-                localStorage.removeItem('dutyEternalData');
+                // Clear all storage methods
+                try {
+                    localStorage.removeItem('dutyEternalData');
+                    localStorage.removeItem('dutyEternalDataDirect');
+                    localStorage.removeItem('dutyEternalDataBackup');
+                    localStorage.removeItem('dutyEternalDataEncoded');
+                    sessionStorage.removeItem('dutyEternalSession');
+                } catch (e) {
+                    console.warn('Error clearing storage:', e);
+                }
                 
                 // Initialize rank requirements
                 this.initializeRankRequirements();
@@ -4025,7 +4302,7 @@
                 
                 this.elements.corruptionWarning.classList.add('hidden');
                 
-                this.showToast('All data purged! The Emperor welcomes your renewed service.', 'success');
+                this.showToast('All records purged! The Emperor welcomes your renewed service. Begin your eternal duty anew!', 'success');
             }
             
             checkDayChange() {
@@ -4145,137 +4422,6 @@
                         toast.parentNode.removeChild(toast);
                     }
                 }, 4000);
-            }
-            
-            saveToStorage() {
-                try {
-                    const dataToSave = {
-                        duties: this.duties,
-                        missions: this.missions,
-                        nextId: this.nextId,
-                        gameState: this.gameState
-                    };
-                    
-                    const encodedData = btoa(JSON.stringify(dataToSave));
-                    localStorage.setItem('dutyEternalData', encodedData);
-                } catch (e) {
-                    console.error('Error saving to localStorage:', e);
-                }
-            }
-            
-            loadFromStorage() {
-                try {
-                    const encodedData = localStorage.getItem('dutyEternalData');
-                    
-                    if (encodedData) {
-                        const data = JSON.parse(atob(encodedData));
-                        
-                        this.duties = data.duties || [];
-                        this.missions = data.missions || [];
-                        this.nextId = data.nextId || 1;
-                        
-                        // Merge saved game state with defaults
-                        this.gameState = {
-                            ...this.gameState,
-                            ...data.gameState,
-                            // Ensure new fields exist with defaults
-                            rankRequirements: data.gameState?.rankRequirements || {},
-                            rankBenefits: data.gameState?.rankBenefits || {},
-                            paragonBenefits: {
-                                maxResolve: 0,
-                                gloryMultiplier: 0,
-                                corruptionResistance: 0,
-                                artifactSlots: 0,
-                                ...data.gameState?.paragonBenefits
-                            },
-                            hereticalBenefits: data.gameState?.hereticalBenefits || {},
-                            redemptionProgress: data.gameState?.redemptionProgress || 0,
-                            factionBuffs: {
-                                zealStacks: 0,
-                                dutyStacks: 0,
-                                lastMissionTime: null,
-                                consecutiveMissions: 0,
-                                zealDuration: 0,
-                                waaaghUsedToday: false,
-                                lastDayReset: new Date().toDateString(),
-                                ...data.gameState?.factionBuffs
-                            },
-                            // Initialize new stats if missing
-                            totalArtifactsFound: data.gameState?.totalArtifactsFound || 0,
-                            totalArtifactsSold: data.gameState?.totalArtifactsSold || 0,
-                            factionMissionsCompleted: {
-                                'space-marines': 0,
-                                'chaos': 0,
-                                'orks': 0,
-                                'eldar': 0,
-                                'imperial-guard': 0,
-                                ...data.gameState?.factionMissionsCompleted
-                            },
-                            factionGloryEarned: {
-                                'space-marines': 0,
-                                'chaos': 0,
-                                'orks': 0,
-                                'eldar': 0,
-                                'imperial-guard': 0,
-                                ...data.gameState?.factionGloryEarned
-                            }
-                        };
-                    }
-                } catch (e) {
-                    console.error('Error loading from localStorage:', e);
-                    // Try to load old format data if new format fails
-                    try {
-                        const oldData = localStorage.getItem('dutyEternalData');
-                        if (oldData) {
-                            const parsed = JSON.parse(oldData);
-                            this.duties = parsed.duties || [];
-                            this.missions = parsed.missions || [];
-                            this.nextId = parsed.nextId || 1;
-                            this.gameState = {
-                                ...this.gameState,
-                                ...parsed.gameState,
-                                lastResolveRegeneration: Date.now(),
-                                rankRequirements: {},
-                                rankBenefits: {},
-                                paragonBenefits: {
-                                    maxResolve: 0,
-                                    gloryMultiplier: 0,
-                                    corruptionResistance: 0,
-                                    artifactSlots: 0
-                                },
-                                hereticalBenefits: {},
-                                redemptionProgress: 0,
-                                factionBuffs: {
-                                    zealStacks: 0,
-                                    dutyStacks: 0,
-                                    lastMissionTime: null,
-                                    consecutiveMissions: 0,
-                                    zealDuration: 0,
-                                    waaaghUsedToday: false,
-                                    lastDayReset: new Date().toDateString()
-                                },
-                                totalArtifactsFound: 0,
-                                totalArtifactsSold: 0,
-                                factionMissionsCompleted: {
-                                    'space-marines': 0,
-                                    'chaos': 0,
-                                    'orks': 0,
-                                    'eldar': 0,
-                                    'imperial-guard': 0
-                                },
-                                factionGloryEarned: {
-                                    'space-marines': 0,
-                                    'chaos': 0,
-                                    'orks': 0,
-                                    'eldar': 0,
-                                    'imperial-guard': 0
-                                }
-                            };
-                        }
-                    } catch (oldError) {
-                        console.error('Error loading old format data:', oldError);
-                    }
-                }
             }
         }
         
