@@ -212,6 +212,34 @@
             animation: fadeIn 0.3s ease-in-out;
         }
         
+        /* Mobile responsive tab navigation */
+        .tab-btn {
+            transition: all 0.3s ease;
+        }
+        
+        .tab-btn .tab-text {
+            display: inline;
+        }
+        
+        .tab-btn .tab-icon {
+            margin-right: 0.25rem;
+        }
+        
+        @media (max-width: 768px) {
+            .tab-btn .tab-text {
+                display: none;
+            }
+            
+            .tab-btn .tab-icon {
+                margin-right: 0;
+            }
+            
+            .tab-btn {
+                min-width: 40px;
+                justify-content: center;
+            }
+        }
+        
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 10px;
@@ -246,17 +274,28 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 1rem;
         }
         
         .modal-content {
             background-color: #1a1a1a;
             border: 3px solid #654321;
-            padding: 2rem;
+            padding: 1.5rem;
             max-width: 600px;
-            width: 90%;
+            width: 100%;
+            max-height: 90vh;
             border-radius: 8px;
             position: relative;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(218, 165, 32, 0.1);
+            overflow-y: auto;
+        }
+        
+        @media (max-width: 640px) {
+            .modal-content {
+                padding: 1rem;
+                margin: 0.5rem;
+                max-height: 95vh;
+            }
         }
         
         .free-completion {
@@ -532,24 +571,29 @@
         
         <div class="container mx-auto mt-4">
             <nav class="flex">
-                <button class="tab-btn group active px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-accent relative" data-tab="missions">
-                    <i class="fas fa-scroll mr-1"></i> Mission Board
+                <button class="tab-btn group active px-2 sm:px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-accent relative flex items-center justify-center" data-tab="missions">
+                    <i class="fas fa-scroll tab-icon"></i>
+                    <span class="tab-text">Mission Board</span>
                     <div class="tooltip-text above">Access the Emperor's sacred decrees and assign missions to purge idleness from your soul</div>
                 </button>
-                <button class="tab-btn group px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative" data-tab="armory">
-                    <i class="fas fa-shield-alt mr-1"></i> Armory
+                <button class="tab-btn group px-2 sm:px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative flex items-center justify-center" data-tab="armory">
+                    <i class="fas fa-shield-alt tab-icon"></i>
+                    <span class="tab-text">Armory</span>
                     <div class="tooltip-text above">Equip blessed relics and cursed artifacts to enhance your resolve in battle</div>
                 </button>
-                <button class="tab-btn group px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative" data-tab="archives">
-                    <i class="fas fa-book mr-1"></i> Archives
+                <button class="tab-btn group px-2 sm:px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative flex items-center justify-center" data-tab="archives">
+                    <i class="fas fa-book tab-icon"></i>
+                    <span class="tab-text">Archives</span>
                     <div class="tooltip-text above">Inscribe and manage your sacred duties to serve the Imperium's eternal will</div>
                 </button>
-                <button class="tab-btn group px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative" data-tab="tactical">
-                    <i class="fas fa-chart-line mr-1"></i> Tactical Slate
+                <button class="tab-btn group px-2 sm:px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative flex items-center justify-center" data-tab="tactical">
+                    <i class="fas fa-chart-line tab-icon"></i>
+                    <span class="tab-text">Tactical Slate</span>
                     <div class="tooltip-text above">Review your valorous deeds and track your eternal service to the Emperor</div>
                 </button>
-                <button class="tab-btn group px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative" data-tab="settings">
-                    <i class="fas fa-cog mr-1"></i> Settings
+                <button class="tab-btn group px-2 sm:px-4 py-2 gothic text-accent hover:bg-accent/20 transition-colors rounded-t-lg border-b-2 border-transparent relative flex items-center justify-center" data-tab="settings">
+                    <i class="fas fa-cog tab-icon"></i>
+                    <span class="tab-text">Settings</span>
                     <div class="tooltip-text above">Command your allegiance and calibrate the Vox-Caster for strategic guidance</div>
                 </button>
             </nav>
@@ -1099,7 +1143,7 @@
     
     <!-- Tutorial Modal -->
     <div id="tutorial-modal" class="modal-overlay hidden">
-        <div class="modal-content overflow-y-auto max-h-[80vh]">
+        <div class="modal-content">
             <h2 class="text-2xl gothic font-bold mb-4 text-accent">Vox-Caster Archives</h2>
             
             <div id="tutorial-entries" class="space-y-4 mb-4">
@@ -3375,7 +3419,7 @@
                         content: "Beware the corruption of Chaos! Abandoning missions taints your soul with heretical weakness. Accumulate too much corruption and mission completion will cost additional Resolve. Purge this taint by completing consecutive missions without abandonment - show the Emperor your unwavering dedication."
                     },
                     {
-                        title: "Sacred Artifacts and Faction Powers",
+                        title: "Faction Powers",
                         content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for consecutive missions, Orks have WAAAGH! events, Chaos tempts with Warp power, Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
                     },
                     {
