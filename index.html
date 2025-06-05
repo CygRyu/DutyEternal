@@ -615,6 +615,12 @@
             font-size: 0.8rem;
             margin-bottom: 8px;
         }
+
+        .mission-abandon-disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -1338,7 +1344,7 @@
                 this.currentSort = 'name';
                 this.currentOrder = 'asc';
                 
-                // Game state
+                // Game state with enhanced corruption system
                 this.gameState = {
                     // Basic progression
                     totalMissionsCompleted: 0,
@@ -1358,13 +1364,15 @@
                     corruption: 0,
                     tutorialProgress: 1,
                     
-                    // Resolve system (Stamina equivalent) - now properly tracked
+                    // Enhanced corruption system
                     resolve: 5,
                     maxResolve: 5,
                     lastResolveRegeneration: Date.now(),
                     isCorrupted: false,
                     corruptionQuests: 0,
                     missionsDeletionCount: 0,
+                    consecutiveCompletions: 0,
+                    chaosLordAbandonmentUsed: false,
                     
                     // Artifacts system
                     artifacts: [],
@@ -1504,7 +1512,7 @@
                     'Establish Overwatch Position', 'Conduct Search and Destroy', 'Secure the Extraction Point', 'Prevent Enemy Escape'
                 ];
                 
-                // Faction descriptions for tooltips - updated with new Zeal description
+                // Faction descriptions for tooltips - updated with new corruption description
                 this.factionDescriptions = {
                     'space-marines': {
                         name: 'Space Marines - The Emperor\'s Finest',
@@ -1512,7 +1520,7 @@
                     },
                     'chaos': {
                         name: 'Chaos - Embrace the Dark Gods',
-                        description: '• 10% chance for "Warp Temptation" (bonus Glory Points, +1 Corruption risk)\n• Randomizes task selection for unpredictable missions\n• Brutal and destructive approach to objectives'
+                        description: '• 10% chance for "Warp Temptation" (bonus Glory Points, +1 Corruption risk)\n• Randomizes task selection for unpredictable missions\n• Brutal and destructive approach to objectives\n• Special corruption benefits for Chosen and Chaos Lord ranks'
                     },
                     'orks': {
                         name: 'Orks - WAAAGH! and Mayhem',
@@ -1759,7 +1767,7 @@
                         nextId: this.nextId,
                         gameState: this.gameState,
                         saveTimestamp: Date.now(),
-                        version: '3.3.0'
+                        version: '3.3.1'
                     };
                     
                     // Clean the data for serialization
@@ -1920,10 +1928,13 @@
                     }
                 });
                 
-                // Merge saved game state with defaults
+                // Merge saved game state with defaults, ensuring new corruption fields exist
                 this.gameState = {
                     ...this.gameState,
                     ...data.gameState,
+                    // Ensure new corruption tracking fields exist with defaults
+                    consecutiveCompletions: data.gameState?.consecutiveCompletions || 0,
+                    chaosLordAbandonmentUsed: data.gameState?.chaosLordAbandonmentUsed || false,
                     // Ensure new fields exist with defaults
                     rankRequirements: data.gameState?.rankRequirements || {},
                     rankBenefits: data.gameState?.rankBenefits || {},
@@ -2687,10 +2698,22 @@
                 // Use resolve (if not free completion)
                 if (!isFreeCompletion) {
                     this.gameState.resolve -= finalCost; // Use the final cost which accounts for Zeal
-                    // FIXED: Update lastResolveRegeneration when resolve is consumed
+                    // Update lastResolveRegeneration when resolve is consumed
                     this.gameState.lastResolveRegeneration = Date.now();
                 } else {
                     this.showFreeCompletionEffect();
+                }
+                
+                // Enhanced corruption system: Update consecutive completions
+                this.gameState.consecutiveCompletions++;
+                
+                // Check for corruption reduction (3 consecutive completions)
+                if (this.gameState.consecutiveCompletions >= 3) {
+                    if (this.gameState.corruption > 0) {
+                        this.gameState.corruption--;
+                        this.showToast('Consecutive mission completion! -1 Corruption removed!', 'success');
+                    }
+                    this.gameState.consecutiveCompletions = 0; // Reset counter
                 }
                 
                 // Update corruption counter if corrupted
@@ -2700,6 +2723,7 @@
                         this.gameState.isCorrupted = false;
                         this.gameState.corruptionQuests = 0;
                         this.elements.corruptionWarning.classList.add('hidden');
+                        this.showToast('Corruption status purged! Your resolve is restored.', 'success');
                     }
                 }
                 
@@ -2929,6 +2953,7 @@
                 }, 1500);
             }
             
+            // Enhanced mission deletion with new corruption system
             deleteMission(missionId) {
                 const missionIndex = this.missions.findIndex(m => m.id === missionId);
                 if (missionIndex === -1) return;
@@ -2938,20 +2963,24 @@
                 // Reset consecutive missions counter when abandoning
                 this.gameState.factionBuffs.consecutiveMissions = 0;
                 
+                // Reset consecutive completions counter
+                this.gameState.consecutiveCompletions = 0;
+                
                 // Check for faction-specific abandonment benefits
                 if (this.gameState.faction === 'chaos') {
                     const currentRankNumber = this.getCurrentRankNumber();
                     
-                    // Chaos Lord rank: First abandonment per day doesn't cause corruption
-                    if (currentRankNumber >= 5 && this.gameState.missionsDeletionCount === 0) {
+                    // Chaos Lord rank: First abandonment per day doesn't cause corruption (even at 15/15)
+                    if (currentRankNumber >= 5 && !this.gameState.chaosLordAbandonmentUsed) {
+                        this.gameState.chaosLordAbandonmentUsed = true;
                         this.showToast('Chaos Lord privilege: First abandonment forgiven!', 'success');
                         this.saveToStorage();
                         this.updateMissionBoard();
                         return;
                     }
                     
-                    // Chosen rank: 50% chance to ignore corruption
-                    if (currentRankNumber >= 3 && Math.random() < 0.5) {
+                    // Chosen rank: 50% chance to ignore corruption (disabled at 15/15)
+                    if (currentRankNumber >= 3 && this.gameState.corruption < 15 && Math.random() < 0.5) {
                         this.showToast('Chosen resilience: Corruption ignored!', 'success');
                         this.saveToStorage();
                         this.updateMissionBoard();
@@ -2963,7 +2992,8 @@
                 this.gameState.corruption++;
                 this.gameState.missionsDeletionCount++;
                 
-                if (this.gameState.missionsDeletionCount >= 3) {
+                // Enhanced corruption system: Apply corruption status after 5 missions (was 3)
+                if (this.gameState.missionsDeletionCount >= 5) {
                     this.gameState.isCorrupted = true;
                     this.gameState.corruptionQuests = 0;
                     this.elements.corruptionWarning.classList.remove('hidden');
@@ -3449,6 +3479,14 @@
                         costText += ' (Zeal active!)';
                     }
                     
+                    // Enhanced corruption system: Check if abandon button should be disabled
+                    const canAbandon = this.gameState.corruption < 15;
+                    const abandonButtonClass = canAbandon ? 
+                        'bg-dark-300 hover:bg-dark-200 text-accent/80 border border-accent/20 px-3 py-1.5 rounded transition-colors' :
+                        'mission-abandon-disabled bg-gray-600 text-gray-400 border border-gray-600 px-3 py-1.5 rounded';
+                    
+                    const abandonButtonText = canAbandon ? '<i class="fas fa-times"></i>' : '<i class="fas fa-lock"></i>';
+                    
                     missionCard.innerHTML = `
                         ${specialBadge}
                         <div class="flex justify-between items-start mb-4">
@@ -3471,8 +3509,8 @@
                             <button class="complete-mission-btn ${canComplete ? 'bg-accent hover:bg-accent/80 text-dark' : 'bg-gray-600 cursor-not-allowed text-gray-400'} border border-accent/50 px-3 py-1.5 rounded font-semibold transition-colors flex-grow mr-1" data-id="${mission.id}" ${canComplete ? '' : 'disabled'}>
                                 <i class="fas fa-check mr-1"></i> ${canComplete ? 'Complete Mission' : 'Insufficient Resolve'}
                             </button>
-                            <button class="delete-mission-btn bg-dark-300 hover:bg-dark-200 text-accent/80 border border-accent/20 px-3 py-1.5 rounded transition-colors" data-id="${mission.id}">
-                                <i class="fas fa-times"></i>
+                            <button class="delete-mission-btn ${abandonButtonClass}" data-id="${mission.id}" ${canAbandon ? '' : 'disabled'}>
+                                ${abandonButtonText}
                             </button>
                         </div>
                     `;
@@ -3483,7 +3521,9 @@
                     const deleteBtn = missionCard.querySelector('.delete-mission-btn');
                     
                     completeBtn.addEventListener('click', () => this.completeMission(mission.id));
-                    deleteBtn.addEventListener('click', () => this.showDeleteMissionConfirmation(mission.id));
+                    if (canAbandon) {
+                        deleteBtn.addEventListener('click', () => this.showDeleteMissionConfirmation(mission.id));
+                    }
                 });
                 
                 this.saveToStorage();
@@ -3498,13 +3538,18 @@
                 
                 this.elements.confirmTitle.textContent = 'Abandon Mission';
                 
-                if (this.gameState.missionsDeletionCount >= 2) {
-                    this.elements.confirmMessage.innerHTML = 
-                        `<p>Are you sure you want to abandon "${duty.name}"?</p>
-                        <p class="text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i> Warning: This will be your 3rd abandoned mission. You will be corrupted!</p>`;
-                } else {
-                    this.elements.confirmMessage.textContent = `Are you sure you want to abandon "${duty.name}"?`;
+                // Enhanced corruption system warning messages
+                let warningMessage = '';
+                if (this.gameState.corruption >= 14) {
+                    warningMessage = `<p class="text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i> Warning: This will reach maximum corruption (15/15). Mission abandonment will be disabled!</p>`;
+                } else if (this.gameState.missionsDeletionCount >= 4) {
+                    warningMessage = `<p class="text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i> Warning: This will be your 5th abandoned mission. You will be corrupted!</p>`;
                 }
+                
+                this.elements.confirmMessage.innerHTML = 
+                    `<p>Are you sure you want to abandon "${duty.name}"?</p>
+                    <p class="text-amber-500 mt-2">This will add +1 Corruption and reset consecutive completion counter.</p>
+                    ${warningMessage}`;
                 
                 this.elements.confirmOk.onclick = () => {
                     this.deleteMission(missionId);
@@ -3898,9 +3943,9 @@
                         
                     case 'chaos':
                         if (rankNumber >= 2) benefits.push('Warp Temptation chance: 10% → 15%');
-                        if (rankNumber >= 3) benefits.push('50% chance to ignore Corruption when abandoning');
+                        if (rankNumber >= 3) benefits.push('50% chance to ignore Corruption when abandoning (disabled at 15/15)');
                         if (rankNumber >= 4) benefits.push('Warp Temptation grants +100% bonus Glory');
-                        if (rankNumber >= 5) benefits.push('First mission abandonment each day doesn\'t cause Corruption');
+                        if (rankNumber >= 5) benefits.push('First mission abandonment each day doesn\'t cause Corruption (works even at 15/15)');
                         break;
                         
                     case 'orks':
@@ -3986,12 +4031,12 @@
                         content: "Your Resolve represents your spiritual and physical fortitude in service to the Emperor. Each completed mission consumes 1 Resolve (2 if corrupted), but the Emperor occasionally grants free completion through divine grace. Resolve regenerates at 1 point every 30 minutes - use this time wisely for contemplation. Space Marines can earn Zeal by completing 3 missions within 12 hours, which reduces the next mission's Resolve cost by 1 (can work even at 0 Resolve)."
                     },
                     {
-                        title: "The Taint of Corruption", 
-                        content: "Beware the corruption of Chaos! Abandoning missions taints your soul with heretical weakness. Accumulate too much corruption and mission completion will cost additional Resolve. Purge this taint by completing consecutive missions without abandonment - show the Emperor your unwavering dedication."
+                        title: "Corruption System", 
+                        content: "Beware the corruption of Chaos! Abandoning 5 missions applies corruption status, making missions cost 2 Resolve. Purge this by completing 3 consecutive missions without abandoning. Each abandonment adds +1 corruption level - at 15/15, abandonment is disabled! Complete 3 missions in a row daily to reduce corruption level by 1. Chaos factions have special benefits: Chosen (50% ignore corruption when abandoning, disabled at 15/15) and Chaos Lord (first daily abandonment is free, even at 15/15)."
                     },
                     {
                         title: "Faction Powers and Artifacts",
-                        content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for completing missions within time windows, Orks have WAAAGH! events, Chaos tempts with Warp power, Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
+                        content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for completing missions within time windows, Orks have WAAAGH! events, Chaos tempts with Warp power (with special corruption privileges), Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
                     },
                     {
                         title: "Sacred Artifacts",
@@ -4405,6 +4450,9 @@
                         zealExpirationTime: null
                     };
                     
+                    // Reset enhanced corruption system daily flags
+                    this.gameState.chaosLordAbandonmentUsed = false;
+                    
                     this.updateFactionDisplay();
                     this.updateStats();
                     this.updateRankBenefits();
@@ -4434,7 +4482,7 @@
                         nextId: this.nextId,
                         gameState: this.gameState,
                         exportTimestamp: Date.now(),
-                        version: '3.3.0'
+                        version: '3.3.1'
                     };
                     
                     // Clean the data for export
@@ -4564,6 +4612,8 @@
                     isCorrupted: false,
                     corruptionQuests: 0,
                     missionsDeletionCount: 0,
+                    consecutiveCompletions: 0,
+                    chaosLordAbandonmentUsed: false,
                     artifacts: [],
                     equippedArtifacts: [],
                     totalArtifactsFound: 0,
@@ -4644,6 +4694,9 @@
                     this.gameState.lastReset = today;
                     this.gameState.completedToday = 0;
                     this.gameState.missionsDeletionCount = 0;
+                    
+                    // Enhanced corruption system: Reset daily flags
+                    this.gameState.chaosLordAbandonmentUsed = false;
                     
                     // Reset daily faction buffs
                     this.gameState.factionBuffs.waaaghUsedToday = false;
