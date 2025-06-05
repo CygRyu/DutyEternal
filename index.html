@@ -528,6 +528,93 @@
             font-size: 0.7rem;
             margin-left: 8px;
         }
+
+        .duty-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .duty-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .duty-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .duty-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .duty-slider {
+            background-color: #DAA520;
+        }
+
+        input:checked + .duty-slider:before {
+            transform: translateX(26px);
+        }
+
+        .duty-item.inactive {
+            opacity: 0.5;
+        }
+
+        .sort-controls {
+            background-color: rgba(20, 20, 20, 0.8);
+            border: 1px solid rgba(218, 165, 32, 0.3);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .sort-button {
+            background-color: rgba(218, 165, 32, 0.1);
+            border: 1px solid rgba(218, 165, 32, 0.3);
+            color: #DAA520;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sort-button.active {
+            background-color: rgba(218, 165, 32, 0.3);
+            border-color: #DAA520;
+        }
+
+        .sort-button:hover {
+            background-color: rgba(218, 165, 32, 0.2);
+        }
+
+        .insufficient-duties-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #F59E0B;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -567,7 +654,8 @@
                         <div class="tooltip-text below" id="faction-tooltip-header">
                             <strong>Space Marines - The Emperor's Finest</strong><br>
                             • Favor high-priority tasks (Scale 4-5 get 50% selection boost)<br>
-                            • Complete 3 missions in a row to gain "Zeal" (next mission costs -1 Resolve)<br>
+                            • Complete 3 missions within 12 hours to gain "Zeal" (active for 12 hours)<br>
+                            • Zeal: next mission costs -1 Resolve (works even at 0 Resolve)<br>
                             • Stoic and disciplined approach to all duties
                         </div>
                     </div>
@@ -629,6 +717,10 @@
                     <div id="diminishing-returns-warning" class="hidden diminishing-warning">
                         <i class="fas fa-exclamation-triangle mr-2"></i>
                         <span id="diminishing-message">Diminishing returns active</span>
+                    </div>
+                    <div id="insufficient-duties-warning" class="hidden insufficient-duties-warning">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <span id="insufficient-duties-message">Not enough active duties for mission generation</span>
                     </div>
                 </div>
                 
@@ -815,11 +907,11 @@
                             </div>
                             
                             <div class="col-span-1">
-                                <label for="duty-target-min" class="block text-sm text-accent/80 mb-1">Min Value</label>
+                                <label for="duty-target-min" class="block text-sm text-accent/80 mb-1" id="target-min-label">Value</label>
                                 <input type="number" id="duty-target-min" min="1" value="30" class="w-full bg-dark-300 text-accent border border-accent/50 rounded py-2 px-3 text-base">
                             </div>
                             
-                            <div class="col-span-1">
+                            <div class="col-span-1" id="target-max-container">
                                 <label for="duty-target-max" class="block text-sm text-accent/80 mb-1">Max Value</label>
                                 <input type="number" id="duty-target-max" min="1" value="60" class="w-full bg-dark-300 text-accent border border-accent/50 rounded py-2 px-3 text-base" disabled>
                             </div>
@@ -906,6 +998,22 @@
                             <button id="delete-selected-btn" disabled class="bg-red-900/40 hover:bg-red-800/60 text-accent/50 cursor-not-allowed border border-red-900/30 px-3 py-1 rounded text-sm transition-colors">
                                 <i class="fas fa-trash mr-1"></i> Purge Selected
                             </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Sort Controls -->
+                    <div class="sort-controls">
+                        <div class="flex flex-wrap items-center gap-2 mb-2">
+                            <span class="text-sm text-accent/80">Sort by:</span>
+                            <button class="sort-button active" data-sort="name">Name</button>
+                            <button class="sort-button" data-sort="type">Type</button>
+                            <button class="sort-button" data-sort="priority">Priority</button>
+                            <button class="sort-button" data-sort="active">Active</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-accent/80">Order:</span>
+                            <button class="sort-button active" data-order="asc">Ascending</button>
+                            <button class="sort-button" data-order="desc">Descending</button>
                         </div>
                     </div>
                     
@@ -1072,7 +1180,8 @@
                             <div class="tooltip-text above" id="faction-tooltip-settings">
                                 <strong>Space Marines - The Emperor's Finest</strong><br>
                                 • Favor high-priority tasks (Scale 4-5 get 50% selection boost)<br>
-                                • Complete 3 missions in a row to gain "Zeal" (next mission costs -1 Resolve)<br>
+                                • Complete 3 missions within 12 hours to gain "Zeal" (active for 12 hours)<br>
+                                • Zeal: next mission costs -1 Resolve (works even at 0 Resolve)<br>
                                 • Stoic and disciplined approach to all duties
                             </div>
                         </div>
@@ -1225,6 +1334,10 @@
                 this.lastSaveTime = 0;
                 this.saveFailures = 0;
                 
+                // Sorting state
+                this.currentSort = 'name';
+                this.currentOrder = 'asc';
+                
                 // Game state
                 this.gameState = {
                     // Basic progression
@@ -1245,7 +1358,7 @@
                     corruption: 0,
                     tutorialProgress: 1,
                     
-                    // Resolve system (Stamina equivalent)
+                    // Resolve system (Stamina equivalent) - now properly tracked
                     resolve: 5,
                     maxResolve: 5,
                     lastResolveRegeneration: Date.now(),
@@ -1275,7 +1388,7 @@
                         'imperial-guard': 0
                     },
                     
-                    // Faction-specific buffs and progress
+                    // Faction-specific buffs and progress - enhanced for new Zeal system
                     factionBuffs: {
                         zealStacks: 0,
                         dutyStacks: 0,
@@ -1283,7 +1396,11 @@
                         consecutiveMissions: 0,
                         zealDuration: 0,
                         waaaghUsedToday: false,
-                        lastDayReset: new Date().toDateString()
+                        lastDayReset: new Date().toDateString(),
+                        // New Zeal tracking
+                        zealProgress: [], // Array of completion timestamps
+                        zealActivationTime: null, // When Zeal was last activated
+                        zealExpirationTime: null // When current Zeal expires
                     },
                     
                     // Rank progression system
@@ -1387,11 +1504,11 @@
                     'Establish Overwatch Position', 'Conduct Search and Destroy', 'Secure the Extraction Point', 'Prevent Enemy Escape'
                 ];
                 
-                // Faction descriptions for tooltips
+                // Faction descriptions for tooltips - updated with new Zeal description
                 this.factionDescriptions = {
                     'space-marines': {
                         name: 'Space Marines - The Emperor\'s Finest',
-                        description: '• Favor high-priority tasks (Scale 4-5 get 50% selection boost)\n• Complete 3 missions in a row to gain "Zeal" (next mission costs -1 Resolve)\n• Stoic and disciplined approach to all duties'
+                        description: '• Favor high-priority tasks (Scale 4-5 get 50% selection boost)\n• Complete 3 missions within 12 hours to gain "Zeal" (active for 12 hours)\n• Zeal: next mission costs -1 Resolve (works even at 0 Resolve)\n• Stoic and disciplined approach to all duties'
                     },
                     'chaos': {
                         name: 'Chaos - Embrace the Dark Gods',
@@ -1454,6 +1571,7 @@
                 this.updateParagonBenefits();
                 this.updateArtifactsDisplay();
                 this.updateDiminishingReturnsWarning();
+                this.updateInsufficientDutiesWarning();
                 
                 // Start resolve regeneration timer
                 this.startResolveRegeneration();
@@ -1479,6 +1597,8 @@
                     waaaghButtonContainer: document.getElementById('waaagh-button-container'),
                     diminishingReturnsWarning: document.getElementById('diminishing-returns-warning'),
                     diminishingMessage: document.getElementById('diminishing-message'),
+                    insufficientDutiesWarning: document.getElementById('insufficient-duties-warning'),
+                    insufficientDutiesMessage: document.getElementById('insufficient-duties-message'),
                     
                     // Resolve display
                     resolveDisplay: document.getElementById('resolve-display'),
@@ -1520,10 +1640,16 @@
                     dutyTargetType: document.getElementById('duty-target-type'),
                     dutyTargetMin: document.getElementById('duty-target-min'),
                     dutyTargetMax: document.getElementById('duty-target-max'),
+                    targetMinLabel: document.getElementById('target-min-label'),
+                    targetMaxContainer: document.getElementById('target-max-container'),
                     dutyPriority: document.getElementById('duty-priority'),
                     priorityValue: document.getElementById('priority-value'),
                     iconButtons: document.querySelectorAll('.icon-btn'),
                     selectedIcon: document.getElementById('selected-icon'),
+                    
+                    // Sort controls
+                    sortButtons: document.querySelectorAll('[data-sort]'),
+                    orderButtons: document.querySelectorAll('[data-order]'),
                     
                     // Bulk operations
                     selectAllBtn: document.getElementById('select-all-btn'),
@@ -1633,7 +1759,7 @@
                         nextId: this.nextId,
                         gameState: this.gameState,
                         saveTimestamp: Date.now(),
-                        version: '3.2.1'
+                        version: '3.3.0'
                     };
                     
                     // Clean the data for serialization
@@ -1787,6 +1913,13 @@
                 this.missions = data.missions || [];
                 this.nextId = data.nextId || 1;
                 
+                // Ensure all duties have the active property (default to true for backwards compatibility)
+                this.duties.forEach(duty => {
+                    if (duty.active === undefined) {
+                        duty.active = true;
+                    }
+                });
+                
                 // Merge saved game state with defaults
                 this.gameState = {
                     ...this.gameState,
@@ -1811,6 +1944,10 @@
                         zealDuration: 0,
                         waaaghUsedToday: false,
                         lastDayReset: new Date().toDateString(),
+                        // New Zeal tracking
+                        zealProgress: [],
+                        zealActivationTime: null,
+                        zealExpirationTime: null,
                         ...data.gameState?.factionBuffs
                     },
                     // Initialize new stats if missing
@@ -1916,12 +2053,16 @@
                     }
                 });
                 
-                // Target type change
+                // Target type change - updated for new UI
                 this.elements.dutyTargetType.addEventListener('change', () => {
                     if (this.elements.dutyTargetType.value === 'range') {
+                        this.elements.targetMinLabel.textContent = 'Min Value';
                         this.elements.dutyTargetMax.removeAttribute('disabled');
+                        this.elements.targetMaxContainer.classList.remove('hidden');
                     } else {
+                        this.elements.targetMinLabel.textContent = 'Value';
                         this.elements.dutyTargetMax.setAttribute('disabled', 'disabled');
+                        this.elements.targetMaxContainer.classList.add('hidden');
                     }
                 });
                 
@@ -1936,6 +2077,25 @@
                         this.elements.iconButtons.forEach(btn => btn.classList.remove('bg-accent/40'));
                         button.classList.add('bg-accent/40');
                         this.elements.selectedIcon.value = button.getAttribute('data-icon');
+                    });
+                });
+                
+                // Sort controls
+                this.elements.sortButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        this.elements.sortButtons.forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                        this.currentSort = button.getAttribute('data-sort');
+                        this.updateDutyList();
+                    });
+                });
+                
+                this.elements.orderButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        this.elements.orderButtons.forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                        this.currentOrder = button.getAttribute('data-order');
+                        this.updateDutyList();
                     });
                 });
                 
@@ -2096,6 +2256,70 @@
                 }
             }
             
+            // Update the insufficient duties warning
+            updateInsufficientDutiesWarning() {
+                const activeDuties = this.duties.filter(duty => duty.active);
+                const desiredCount = parseInt(this.elements.missionCount.value);
+                
+                if (activeDuties.length > 0 && activeDuties.length < desiredCount) {
+                    this.elements.insufficientDutiesMessage.textContent = 
+                        `Only ${activeDuties.length} active duties available for ${desiredCount} missions. Enable more duties or reduce mission count.`;
+                    this.elements.insufficientDutiesWarning.classList.remove('hidden');
+                } else {
+                    this.elements.insufficientDutiesWarning.classList.add('hidden');
+                }
+            }
+            
+            // Enhanced Zeal system for Space Marines
+            updateZealProgress() {
+                if (this.gameState.faction !== 'space-marines') return;
+                
+                const now = Date.now();
+                const twelveHours = 12 * 60 * 60 * 1000;
+                
+                // Clean up old progress entries (older than 12 hours)
+                this.gameState.factionBuffs.zealProgress = this.gameState.factionBuffs.zealProgress.filter(
+                    timestamp => (now - timestamp) <= twelveHours
+                );
+                
+                // Check if Zeal has expired
+                if (this.gameState.factionBuffs.zealExpirationTime && now > this.gameState.factionBuffs.zealExpirationTime) {
+                    this.gameState.factionBuffs.zealStacks = 0;
+                    this.gameState.factionBuffs.zealActivationTime = null;
+                    this.gameState.factionBuffs.zealExpirationTime = null;
+                }
+                
+                // Add current mission completion to progress
+                this.gameState.factionBuffs.zealProgress.push(now);
+                
+                // Check if we have 3 completions within 12 hours
+                if (this.gameState.factionBuffs.zealProgress.length >= 3) {
+                    // Activate Zeal for 12 hours
+                    this.gameState.factionBuffs.zealStacks = 1;
+                    this.gameState.factionBuffs.zealActivationTime = now;
+                    this.gameState.factionBuffs.zealExpirationTime = now + twelveHours;
+                    
+                    // Battle-Brother rank: Zeal buff lasts +1 additional mission
+                    if (this.getCurrentRankNumber() >= 2) {
+                        this.gameState.factionBuffs.zealDuration = 1;
+                    }
+                    
+                    // Clear progress after activation
+                    this.gameState.factionBuffs.zealProgress = [];
+                    
+                    this.showToast('Zeal achieved! Next mission costs -1 Resolve (active for 12 hours)!', 'success');
+                }
+            }
+            
+            isZealActive() {
+                if (this.gameState.faction !== 'space-marines') return false;
+                
+                const now = Date.now();
+                return this.gameState.factionBuffs.zealStacks > 0 && 
+                       this.gameState.factionBuffs.zealExpirationTime && 
+                       now <= this.gameState.factionBuffs.zealExpirationTime;
+            }
+            
             triggerWaaaghEvent() {
                 if (this.gameState.resolve < 2) {
                     this.showWarning('Insufficient resolve for WAAAGH!');
@@ -2107,15 +2331,16 @@
                     return;
                 }
                 
-                if (this.duties.length === 0) {
-                    this.showWarning('No duties available for WAAAGH!');
+                const activeDuties = this.duties.filter(duty => duty.active);
+                if (activeDuties.length === 0) {
+                    this.showWarning('No active duties available for WAAAGH!');
                     return;
                 }
                 
                 this.gameState.resolve -= 2;
                 this.gameState.factionBuffs.waaaghUsedToday = true;
                 
-                const randomDuty = this.duties[Math.floor(Math.random() * this.duties.length)];
+                const randomDuty = activeDuties[Math.floor(Math.random() * activeDuties.length)];
                 let target = randomDuty.targetType === 'at-least' ? randomDuty.targetMin * 2 : randomDuty.targetMax * 2;
                 
                 const waaaghMission = {
@@ -2138,7 +2363,9 @@
             }
             
             generateMissions() {
-                if (this.duties.length === 0) {
+                const activeDuties = this.duties.filter(duty => duty.active);
+                
+                if (activeDuties.length === 0) {
                     this.showWarning('Inscribe duties in the Archives first, loyal servant!');
                     return;
                 }
@@ -2156,9 +2383,9 @@
                     return;
                 }
                 
-                if (this.duties.length < emptySlots) {
+                if (activeDuties.length < emptySlots) {
                     this.elements.warningMessage.textContent = 
-                        `Only ${this.duties.length} duties available; duplicates may occur.`;
+                        `Only ${activeDuties.length} active duties available; duplicates may occur.`;
                     this.elements.missionWarning.classList.remove('hidden');
                     
                     setTimeout(() => {
@@ -2175,6 +2402,7 @@
                 this.saveToStorage();
                 this.updateMissionBoard();
                 this.updateStats();
+                this.updateInsufficientDutiesWarning();
                 
                 this.elements.emptyMissionPrompt.classList.add('hidden');
             }
@@ -2191,7 +2419,8 @@
                     }
                     
                     if (Math.random() < waaaghChance) {
-                        const randomDuty = this.duties[Math.floor(Math.random() * this.duties.length)];
+                        const activeDuties = this.duties.filter(duty => duty.active);
+                        const randomDuty = activeDuties[Math.floor(Math.random() * activeDuties.length)];
                         if (randomDuty) {
                             let target = randomDuty.targetType === 'at-least' ? randomDuty.targetMin * 2 : randomDuty.targetMax * 2;
                             
@@ -2214,7 +2443,8 @@
             
             selectRandomDuties(count) {
                 const newMissions = [];
-                const availableDuties = [...this.duties];
+                const activeDuties = this.duties.filter(duty => duty.active);
+                const availableDuties = [...activeDuties];
                 const currentMissionIds = this.missions.map(mission => mission.dutyId);
                 
                 for (let i = 0; i < count; i++) {
@@ -2378,7 +2608,11 @@
                 
                 const isFreeCompletion = Math.random() < 0.05;
                 
-                if (!isFreeCompletion && this.gameState.resolve < resolveCost) {
+                // Enhanced resolve check - if Zeal is active and would make cost 0 or negative, allow completion even at 0 resolve
+                const zealActive = this.isZealActive();
+                const finalCost = zealActive ? Math.max(0, resolveCost - 1) : resolveCost;
+                
+                if (!isFreeCompletion && this.gameState.resolve < resolveCost && !(zealActive && finalCost === 0)) {
                     this.showWarning('Insufficient resolve! Wait for regeneration or purge your corruption.');
                     return;
                 }
@@ -2449,7 +2683,7 @@
                 
                 // Use resolve (if not free completion)
                 if (!isFreeCompletion) {
-                    this.gameState.resolve -= resolveCost;
+                    this.gameState.resolve -= finalCost; // Use the final cost which accounts for Zeal
                 } else {
                     this.showFreeCompletionEffect();
                 }
@@ -2467,6 +2701,11 @@
                 // Update consecutive missions counter
                 this.gameState.factionBuffs.consecutiveMissions++;
                 this.gameState.factionBuffs.lastMissionTime = Date.now();
+                
+                // Update Zeal progress for Space Marines
+                if (this.gameState.faction === 'space-marines') {
+                    this.updateZealProgress();
+                }
                 
                 // Check for rank progression
                 this.checkRankProgression();
@@ -2488,7 +2727,7 @@
                 }
                 
                 // Show completion toast with rewards
-                this.showMissionCompletionToast(duty, gloryEarned, resolveCost, isFreeCompletion, diminishingMultiplier);
+                this.showMissionCompletionToast(duty, gloryEarned, finalCost, isFreeCompletion, diminishingMultiplier, zealActive);
                 
                 // Check for Warboss mini-WAAAGH! trigger
                 if (this.gameState.faction === 'orks' && this.getCurrentRankNumber() >= 5 && Math.random() < 0.1) {
@@ -2518,9 +2757,11 @@
             applyFactionResolveBonuses(baseCost) {
                 let cost = baseCost;
                 
-                // Apply Space Marines Zeal buff
-                if (this.gameState.faction === 'space-marines' && this.gameState.factionBuffs.zealStacks > 0) {
-                    cost = Math.max(0, cost - 1);
+                // Apply Space Marines Zeal buff (enhanced version)
+                if (this.gameState.faction === 'space-marines' && this.isZealActive()) {
+                    cost = Math.max(0, cost - 1); // Can reduce to 0
+                    
+                    // Consume Zeal
                     this.gameState.factionBuffs.zealStacks--;
                     
                     // Battle-Brother rank: Zeal buff lasts +1 additional mission
@@ -2549,18 +2790,7 @@
                 
                 switch (this.gameState.faction) {
                     case 'space-marines':
-                        // Check for Zeal buff (3 consecutive missions)
-                        if (this.gameState.factionBuffs.consecutiveMissions >= 3) {
-                            this.gameState.factionBuffs.zealStacks++;
-                            this.gameState.factionBuffs.consecutiveMissions = 0;
-                            
-                            // Battle-Brother rank: Zeal buff lasts +1 additional mission
-                            if (currentRankNumber >= 2) {
-                                this.gameState.factionBuffs.zealDuration = 1;
-                            }
-                            
-                            this.showToast('Zeal achieved! Next mission costs -1 Resolve!', 'success');
-                        }
+                        // Check for Zeal buff - handled in updateZealProgress
                         break;
                         
                     case 'chaos':
@@ -2631,9 +2861,10 @@
             }
             
             triggerMiniWaaaghEvent() {
-                if (this.duties.length === 0) return;
+                const activeDuties = this.duties.filter(duty => duty.active);
+                if (activeDuties.length === 0) return;
                 
-                const randomDuty = this.duties[Math.floor(Math.random() * this.duties.length)];
+                const randomDuty = activeDuties[Math.floor(Math.random() * activeDuties.length)];
                 let target = randomDuty.targetType === 'at-least' ? randomDuty.targetMin : 
                              Math.floor(Math.random() * (randomDuty.targetMax - randomDuty.targetMin + 1)) + randomDuty.targetMin;
                 
@@ -2651,7 +2882,7 @@
                 this.showToast('MINI-WAAAGH! The Warboss\' legend inspires another mission!', 'success');
             }
             
-            showMissionCompletionToast(duty, gloryEarned, resolveCost, isFree, diminishingMultiplier) {
+            showMissionCompletionToast(duty, gloryEarned, resolveCost, isFree, diminishingMultiplier, zealUsed) {
                 let message = `Mission completed: "${duty.name}"`;
                 message += `\n+${gloryEarned} Glory Points`;
                 
@@ -2665,6 +2896,9 @@
                     message += '\n🌟 Free completion by Emperor\'s Grace!';
                 } else {
                     message += `\n-${resolveCost} Resolve`;
+                    if (zealUsed && resolveCost === 0) {
+                        message += ' (Zeal reduced cost to 0!)';
+                    }
                 }
                 
                 // Add faction-specific flavor
@@ -3098,6 +3332,38 @@
                 });
             }
             
+            sortDuties(duties) {
+                const sorted = [...duties];
+                
+                sorted.sort((a, b) => {
+                    let comparison = 0;
+                    
+                    switch (this.currentSort) {
+                        case 'name':
+                            comparison = a.name.localeCompare(b.name);
+                            break;
+                        case 'type':
+                            comparison = a.type.localeCompare(b.type);
+                            break;
+                        case 'priority':
+                            comparison = a.priority - b.priority;
+                            break;
+                        case 'active':
+                            // Sort by active state first, then by name
+                            if (a.active !== b.active) {
+                                comparison = a.active ? -1 : 1;
+                            } else {
+                                comparison = a.name.localeCompare(b.name);
+                            }
+                            break;
+                    }
+                    
+                    return this.currentOrder === 'desc' ? -comparison : comparison;
+                });
+                
+                return sorted;
+            }
+            
             updateMissionBoard() {
                 const missionContainer = this.elements.missionContainer;
                 
@@ -3133,9 +3399,14 @@
                     mission.isNew = false;
                     
                     let resolveCost = this.getBaseMissionCost();
-                    resolveCost = this.applyFactionResolveBonuses(resolveCost);
                     
-                    const canComplete = this.gameState.resolve >= resolveCost;
+                    // Apply Zeal cost reduction for display
+                    const zealActive = this.isZealActive();
+                    if (zealActive) {
+                        resolveCost = Math.max(0, resolveCost - 1);
+                    }
+                    
+                    const canComplete = this.gameState.resolve >= resolveCost || (zealActive && resolveCost === 0);
                     
                     let specialBadge = '';
                     if (mission.isSpecial) {
@@ -3168,6 +3439,11 @@
                         gloryText += ` (${percentage}% efficiency)`;
                     }
                     
+                    let costText = `Costs ${resolveCost} Resolve`;
+                    if (zealActive && resolveCost === 0) {
+                        costText += ' (Zeal active!)';
+                    }
+                    
                     missionCard.innerHTML = `
                         ${specialBadge}
                         <div class="flex justify-between items-start mb-4">
@@ -3183,7 +3459,7 @@
                         <div class="mb-4">
                             <p class="text-accent/70 text-sm italic mb-2">${mission.flavorText}</p>
                             <p class="text-accent text-lg mt-1 font-bold">${mission.target} ${duty.unit}</p>
-                            <p class="text-xs text-accent/50 mt-1">Costs ${resolveCost} Resolve • ${gloryText}</p>
+                            <p class="text-xs text-accent/50 mt-1">${costText} • ${gloryText}</p>
                         </div>
                         
                         <div class="flex justify-between">
@@ -3305,10 +3581,16 @@
                 // Update rank progress bar
                 this.updateRankProgressBar();
                 
-                // Update faction buffs display
+                // Update faction buffs display - enhanced for new Zeal system
                 let buffsText = '';
-                if (this.gameState.faction === 'space-marines' && this.gameState.factionBuffs.zealStacks > 0) {
-                    buffsText += `<span class="buff-indicator zeal-buff">Zeal x${this.gameState.factionBuffs.zealStacks}</span>`;
+                if (this.gameState.faction === 'space-marines') {
+                    if (this.isZealActive()) {
+                        const expirationTime = this.gameState.factionBuffs.zealExpirationTime;
+                        const timeLeft = Math.max(0, Math.floor((expirationTime - Date.now()) / (60 * 1000))); // minutes
+                        buffsText += `<span class="buff-indicator zeal-buff">Zeal (${timeLeft}m left)</span>`;
+                    } else if (this.gameState.factionBuffs.zealProgress.length > 0) {
+                        buffsText += `<span class="buff-indicator zeal-buff">Zeal Progress: ${this.gameState.factionBuffs.zealProgress.length}/3</span>`;
+                    }
                 }
                 if (this.gameState.faction === 'imperial-guard' && this.gameState.factionBuffs.dutyStacks > 0) {
                     buffsText += `<span class="buff-indicator duty-buff">Duty x${this.gameState.factionBuffs.dutyStacks}</span>`;
@@ -3692,11 +3974,11 @@
                 const tutorialEntries = [
                     {
                         title: "The Emperor's Service",
-                        content: "Welcome, faithful servant. The Mission Board channels the Emperor's will, transforming your mundane tasks into sacred duties. Input activities in the Archives, then receive divine missions to crush procrastination and serve the Imperium. Complete missions to earn Glory Points and prove your worth. Note: Your progress is automatically saved, but you can use Export Data to create manual backups of your service record."
+                        content: "Welcome, faithful servant. The Mission Board channels the Emperor's will, transforming your mundane tasks into sacred duties. Input activities in the Archives, then receive divine missions to crush procrastination and serve the Imperium. Complete missions to earn Glory Points and prove your worth. Toggle duties on/off to control which ones appear in missions. Note: Your progress is automatically saved, but you can use Export Data to create manual backups of your service record."
                     },
                     {
                         title: "Resolve and Duty",
-                        content: "Your Resolve represents your spiritual and physical fortitude in service to the Emperor. Each completed mission consumes 1 Resolve (2 if corrupted), but the Emperor occasionally grants free completion through divine grace. Resolve regenerates at 1 point every 30 minutes - use this time wisely for contemplation."
+                        content: "Your Resolve represents your spiritual and physical fortitude in service to the Emperor. Each completed mission consumes 1 Resolve (2 if corrupted), but the Emperor occasionally grants free completion through divine grace. Resolve regenerates at 1 point every 30 minutes - use this time wisely for contemplation. Space Marines can earn Zeal by completing 3 missions within 12 hours, which reduces the next mission's Resolve cost by 1 (can work even at 0 Resolve)."
                     },
                     {
                         title: "The Taint of Corruption", 
@@ -3704,7 +3986,7 @@
                     },
                     {
                         title: "Faction Powers and Artifacts",
-                        content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for consecutive missions, Orks have WAAAGH! events, Chaos tempts with Warp power, Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
+                        content: "The galaxy is filled with blessed relics and cursed artifacts. Complete missions and events to discover these items, which provide various boons to aid your service. Each faction also grants unique abilities: Space Marines gain Zeal for completing missions within time windows, Orks have WAAAGH! events, Chaos tempts with Warp power, Eldar refund Resolve for swift completion, and Imperial Guard build Duty for persistent service."
                     },
                     {
                         title: "Sacred Artifacts",
@@ -3716,7 +3998,7 @@
                     },
                     {
                         title: "Paragon of the Imperium",
-                        content: "True servants of the Emperor never cease their duty. Upon reaching the highest rank in your faction, you begin the path of Paragon - an endless progression of increasing legend and capability. Paragon Ranks grant permanent benefits like increased maximum Resolve, Glory Point bonuses, corruption resistance, and artifact slots. Your dedication shall echo through eternity! Be aware: Excessive daily mission completion may result in diminishing Glory returns as your spirit grows weary - pace yourself for optimal service. Your data is saved automatically every 30 seconds, but regularly use Export Data to create safe backups of your eternal service record."
+                        content: "True servants of the Emperor never cease their duty. Upon reaching the highest rank in your faction, you begin the path of Paragon - an endless progression of increasing legend and capability. Paragon Ranks grant permanent benefits like increased maximum Resolve, Glory Point bonuses, corruption resistance, and artifact slots. Your dedication shall echo through eternity! Be aware: Excessive daily mission completion may result in diminishing Glory returns as your spirit grows weary - pace yourself for optimal service. You can sort your duties by name, type, priority, or active status to better organize your sacred obligations. Your data is saved automatically every 30 seconds, but regularly use Export Data to create safe backups of your eternal service record."
                     }
                 ];
                 
@@ -3740,6 +4022,11 @@
                 this.elements.customType.classList.add('hidden');
                 this.elements.customObject.classList.add('hidden');
                 this.elements.customUnit.classList.add('hidden');
+                
+                // Reset target type UI to default
+                this.elements.targetMinLabel.textContent = 'Value';
+                this.elements.targetMaxContainer.classList.add('hidden');
+                this.elements.dutyTargetMax.setAttribute('disabled', 'disabled');
                 
                 this.elements.iconButtons.forEach(btn => btn.classList.remove('bg-accent/40'));
                 this.elements.iconButtons[0].classList.add('bg-accent/40');
@@ -3773,10 +4060,14 @@
                     this.elements.dutyTargetMin.value = duty.targetMin;
                     
                     if (duty.targetType === 'range') {
+                        this.elements.targetMinLabel.textContent = 'Min Value';
                         this.elements.dutyTargetMax.value = duty.targetMax;
                         this.elements.dutyTargetMax.removeAttribute('disabled');
+                        this.elements.targetMaxContainer.classList.remove('hidden');
                     } else {
+                        this.elements.targetMinLabel.textContent = 'Value';
                         this.elements.dutyTargetMax.setAttribute('disabled', 'disabled');
+                        this.elements.targetMaxContainer.classList.add('hidden');
                     }
                     
                     if (this.elements.dutyUnitSelect.querySelector(`option[value="${duty.unit}"]`)) {
@@ -3852,6 +4143,7 @@
                     unit,
                     priority,
                     icon,
+                    active: true, // Default to active for new duties
                     lastCompleted: null
                 };
                 
@@ -3859,6 +4151,7 @@
                     const index = this.duties.findIndex(d => d.id === parseInt(id));
                     if (index !== -1) {
                         duty.id = parseInt(id);
+                        duty.active = this.duties[index].active; // Preserve active state
                         duty.lastCompleted = this.duties[index].lastCompleted;
                         this.duties[index] = duty;
                     }
@@ -3869,6 +4162,7 @@
                 
                 this.saveToStorage();
                 this.updateDutyList();
+                this.updateInsufficientDutiesWarning();
                 this.hideDutyForm();
             }
             
@@ -3881,11 +4175,13 @@
                 } else {
                     this.elements.emptyDutyList.classList.add('hidden');
                     
-                    this.duties.forEach(duty => {
+                    const sortedDuties = this.sortDuties(this.duties);
+                    
+                    sortedDuties.forEach(duty => {
                         const dutyItem = document.createElement('div');
-                        dutyItem.className = 'bg-dark-400 border border-accent/30 rounded-lg p-3 mb-2 relative';
+                        dutyItem.className = `bg-dark-400 border border-accent/30 rounded-lg p-3 mb-2 relative duty-item ${!duty.active ? 'inactive' : ''}`;
                         
-                        let priorityHtml = '<div class="priority-indicator absolute top-3 right-3">';
+                        let priorityHtml = '<div class="priority-indicator absolute top-3 right-12">';
                         for (let i = 1; i <= 5; i++) {
                             priorityHtml += `<div class="${i <= duty.priority ? 'active' : ''}"></div>`;
                         }
@@ -3913,6 +4209,12 @@
                                     </p>
                                 </div>
                                 ${priorityHtml}
+                                <div class="absolute top-3 right-3">
+                                    <label class="duty-toggle">
+                                        <input type="checkbox" ${duty.active ? 'checked' : ''} data-duty-id="${duty.id}">
+                                        <span class="duty-slider"></span>
+                                    </label>
+                                </div>
                             </div>
                             <div class="flex justify-end mt-2 space-x-2">
                                 <button class="edit-duty-btn bg-dark-300 hover:bg-dark-200 text-accent/80 border border-accent/20 px-2 py-1 rounded text-sm transition-colors" data-id="${duty.id}">
@@ -3929,11 +4231,26 @@
                         const editBtn = dutyItem.querySelector('.edit-duty-btn');
                         const deleteBtn = dutyItem.querySelector('.delete-duty-btn');
                         const checkbox = dutyItem.querySelector('.duty-checkbox');
+                        const toggle = dutyItem.querySelector('.duty-toggle input');
                         
                         editBtn.addEventListener('click', () => this.editDuty(duty.id));
                         deleteBtn.addEventListener('click', () => this.showDeleteDutyConfirmation(duty.id));
                         checkbox.addEventListener('change', () => this.updateDeleteSelectedButton());
+                        toggle.addEventListener('change', () => this.toggleDutyActive(duty.id));
                     });
+                }
+            }
+            
+            toggleDutyActive(dutyId) {
+                const duty = this.duties.find(d => d.id === dutyId);
+                if (duty) {
+                    duty.active = !duty.active;
+                    this.updateDutyList();
+                    this.updateInsufficientDutiesWarning();
+                    this.saveToStorage();
+                    
+                    const action = duty.active ? 'activated' : 'deactivated';
+                    this.showToast(`Duty "${duty.name}" ${action}!`, 'success');
                 }
             }
             
@@ -3966,6 +4283,7 @@
                 this.saveToStorage();
                 this.updateDutyList();
                 this.updateMissionBoard();
+                this.updateInsufficientDutiesWarning();
             }
             
             toggleSelectAll() {
@@ -4019,6 +4337,7 @@
                     this.saveToStorage();
                     this.updateDutyList();
                     this.updateMissionBoard();
+                    this.updateInsufficientDutiesWarning();
                     
                     this.elements.confirmModal.classList.add('hidden');
                 };
@@ -4075,7 +4394,10 @@
                         consecutiveMissions: 0,
                         zealDuration: 0,
                         waaaghUsedToday: false,
-                        lastDayReset: new Date().toDateString()
+                        lastDayReset: new Date().toDateString(),
+                        zealProgress: [],
+                        zealActivationTime: null,
+                        zealExpirationTime: null
                     };
                     
                     this.updateFactionDisplay();
@@ -4107,7 +4429,7 @@
                         nextId: this.nextId,
                         gameState: this.gameState,
                         exportTimestamp: Date.now(),
-                        version: '3.2.1'
+                        version: '3.3.0'
                     };
                     
                     // Clean the data for export
@@ -4186,6 +4508,7 @@
                     this.updateParagonBenefits();
                     this.updateArtifactsDisplay();
                     this.updateDiminishingReturnsWarning();
+                    this.updateInsufficientDutiesWarning();
                     
                     this.elements.importContainer.classList.add('hidden');
                     this.showToast('Sacred data restored successfully! Your eternal service continues unabated.', 'success');
@@ -4261,7 +4584,10 @@
                         consecutiveMissions: 0,
                         zealDuration: 0,
                         waaaghUsedToday: false,
-                        lastDayReset: new Date().toDateString()
+                        lastDayReset: new Date().toDateString(),
+                        zealProgress: [],
+                        zealActivationTime: null,
+                        zealExpirationTime: null
                     },
                     rankRequirements: {},
                     rankBenefits: {},
@@ -4299,6 +4625,7 @@
                 this.updateParagonBenefits();
                 this.updateArtifactsDisplay();
                 this.updateDiminishingReturnsWarning();
+                this.updateInsufficientDutiesWarning();
                 
                 this.elements.corruptionWarning.classList.add('hidden');
                 
@@ -4316,6 +4643,15 @@
                     // Reset daily faction buffs
                     this.gameState.factionBuffs.waaaghUsedToday = false;
                     this.gameState.factionBuffs.lastDayReset = today;
+                    
+                    // Reset Space Marines Zeal progress (new system)
+                    this.gameState.factionBuffs.zealProgress = [];
+                    // Keep active Zeal if it hasn't expired
+                    if (this.gameState.factionBuffs.zealExpirationTime && Date.now() > this.gameState.factionBuffs.zealExpirationTime) {
+                        this.gameState.factionBuffs.zealStacks = 0;
+                        this.gameState.factionBuffs.zealActivationTime = null;
+                        this.gameState.factionBuffs.zealExpirationTime = null;
+                    }
                     
                     // Apply rank 4 universal benefit: daily reset removes 1 corruption
                     if (this.getCurrentRankNumber() >= 4 && this.gameState.corruption > 0) {
