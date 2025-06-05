@@ -631,6 +631,24 @@
             cursor: not-allowed !important;
             pointer-events: none;
         }
+
+	/* Fixed footer positioning */
+footer {
+    backdrop-filter: blur(10px);
+    background-color: rgba(20, 20, 20, 0.95) !important;
+}
+
+/* Add bottom padding to body to prevent content from being hidden behind footer */
+body {
+    padding-bottom: 80px;
+}
+
+/* Adjust for mobile */
+@media (max-width: 640px) {
+    body {
+        padding-bottom: 100px;
+    }
+}
     </style>
 </head>
 <body class="min-h-screen">
@@ -1262,7 +1280,7 @@
         </div>
     </main>
     
-    <footer class="mt-8 py-4 px-4 sm:px-6 border-t border-accent/30 bg-dark-400 text-accent/50 text-sm">
+    <footer class="fixed bottom-0 left-0 right-0 py-4 px-4 sm:px-6 border-t border-accent/30 bg-dark-400 text-accent/50 text-sm z-50">
         <div class="container mx-auto flex flex-col md:flex-row justify-between items-center">
             <div>
                 <p>© 2025 Duty Eternal - By the Emperor's Will</p>
