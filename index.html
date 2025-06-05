@@ -88,18 +88,22 @@
         }
         
         body {
-            font-family: 'Crimson Text', serif;
-            background-color: var(--dark);
-            color: var(--accent);
-            background-image: url("https://raw.githubusercontent.com/CygRyu/DutyEternal/main/BG_Web2.jpg");
+    font-family: 'Crimson Text', serif;
+    background-color: var(--dark);
+    color: var(--accent);
+    background-image: url("https://raw.githubusercontent.com/CygRyu/DutyEternal/main/BG_Web2.jpg");
+    background-attachment: fixed;
     background-size: cover;
-    background-position: center;            background-attachment: fixed;
-        }
+    background-position: center;
+    background-repeat: no-repeat;
+}
 
-        @media (max-width: 768px) {
+/* Mobile background */
+@media (max-width: 768px) {
     body {
         background-image: url("https://raw.githubusercontent.com/CygRyu/DutyEternal/main/BG_Mobile2.jpg");
     }
+}
         
         .gothic {
             font-family: 'Cinzel', serif;
