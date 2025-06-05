@@ -2340,6 +2340,9 @@
                 this.gameState.resolve -= 2;
                 this.gameState.factionBuffs.waaaghUsedToday = true;
                 
+                // Update lastResolveRegeneration when resolve is consumed
+                this.gameState.lastResolveRegeneration = Date.now();
+                
                 const randomDuty = activeDuties[Math.floor(Math.random() * activeDuties.length)];
                 let target = randomDuty.targetType === 'at-least' ? randomDuty.targetMin * 2 : randomDuty.targetMax * 2;
                 
@@ -2684,6 +2687,8 @@
                 // Use resolve (if not free completion)
                 if (!isFreeCompletion) {
                     this.gameState.resolve -= finalCost; // Use the final cost which accounts for Zeal
+                    // FIXED: Update lastResolveRegeneration when resolve is consumed
+                    this.gameState.lastResolveRegeneration = Date.now();
                 } else {
                     this.showFreeCompletionEffect();
                 }
